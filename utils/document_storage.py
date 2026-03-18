@@ -31,8 +31,6 @@ def upload_file_to_supabase(uploaded_file):
 
     safe_name = sanitize_filename(uploaded_file.name)
     unique_name = f"{uuid.uuid4()}_{safe_name}"
-
-    # OJO: no repetimos "documentos/" porque el bucket YA se llama documentos
     storage_path = unique_name
 
     file_bytes = uploaded_file.getvalue()
@@ -69,3 +67,33 @@ def list_documents_from_supabase():
     supabase = get_supabase_client(use_service_role=True)
     result = supabase.table("documentos").select("*").order("creado_en", desc=True).execute()
     return result.data or []
+
+
+def list_bucket_files():
+    supabase = get_supabase_client(use_service_role=True)
+    files = supabase.storage.from_(BUCKET_NAME).list()
+    return files or []
+
+
+def delete_document_from_supabase(document_id, storage_path=None):
+    supabase = get_supabase_client(use_service_role=True)
+
+    storage_deleted = False
+
+    if storage_path:
+        try:
+            supabase.storage.from_(BUCKET_NAME).remove([storage_path])
+            storage_deleted = True
+        except Exception:
+            # Si el archivo no existe en bucket, igual dejamos borrar el registro
+            storage_deleted = False
+
+    db_result = supabase.table("documentos").delete().eq("id", document_id).execute()
+
+    if not db_result.data:
+        raise RuntimeError("No se pudo eliminar el registro del documento en la base.")
+
+    return {
+        "storage_deleted": storage_deleted,
+        "db_deleted": True
+    }
