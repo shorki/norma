@@ -1,3 +1,4 @@
+import hashlib
 import streamlit as st
 from utils.helpers import load_config, save_history_entry, current_datetime_str
 from utils.document_storage import list_documents_from_supabase, download_file_bytes_from_supabase
@@ -32,6 +33,9 @@ if not indexed_docs:
 
 if "consulta_texto" not in st.session_state:
     st.session_state["consulta_texto"] = ""
+
+if "ultimo_audio_hash" not in st.session_state:
+    st.session_state["ultimo_audio_hash"] = ""
 
 if "transcripcion_voz" not in st.session_state:
     st.session_state["transcripcion_voz"] = ""
@@ -101,26 +105,28 @@ with voice_col:
     if audio_value is not None:
         st.audio(audio_value)
 
-        if st.button("Transcribir voz", use_container_width=True):
-            try:
-                audio_bytes = audio_value.read()
+        try:
+            audio_bytes = audio_value.read()
+            audio_hash = hashlib.md5(audio_bytes).hexdigest()
+
+            if audio_hash != st.session_state["ultimo_audio_hash"]:
                 transcript = transcribe_audio_bytes(
                     audio_bytes=audio_bytes,
                     filename="consulta.wav",
                     mime_type="audio/wav"
                 )
 
+                st.session_state["ultimo_audio_hash"] = audio_hash
                 st.session_state["transcripcion_voz"] = transcript
                 st.session_state["consulta_texto"] = transcript
-                st.success("Consulta de voz transcripta correctamente.")
                 st.rerun()
 
-            except Exception as e:
-                st.error(f"No se pudo transcribir el audio: {e}")
+        except Exception as e:
+            st.error(f"No se pudo transcribir el audio: {e}")
 
 with text_col:
     st.markdown("#### Consulta escrita")
-    query = st.text_area(
+    st.text_area(
         "Consulta",
         key="consulta_texto",
         placeholder="Ejemplo: si el poder no aclara cómo actúan dos apoderados, cómo deben actuar",
