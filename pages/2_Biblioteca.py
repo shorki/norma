@@ -5,6 +5,7 @@ from utils.document_storage import (
     create_document_record,
     list_documents_from_supabase,
 )
+from utils.supabase_store import get_supabase_client
 
 st.set_page_config(page_title="Biblioteca | Norma", page_icon="⚖️", layout="wide")
 apply_global_styles()
@@ -23,25 +24,37 @@ uploaded_files = st.file_uploader(
 )
 
 if uploaded_files:
+    st.write(f"Archivos seleccionados: {len(uploaded_files)}")
+    for f in uploaded_files:
+        st.write(f"- {f.name}")
+
     if st.button("Guardar en la nube", use_container_width=True):
+        st.warning("Botón presionado. Iniciando subida...")
         saved = 0
 
         for uploaded_file in uploaded_files:
             try:
+                st.write(f"Procesando: {uploaded_file.name}")
+
                 storage_path = upload_file_to_supabase(uploaded_file)
-                create_document_record(uploaded_file.name, storage_path)
+                st.write(f"Subido a Storage con path: {storage_path}")
+
+                record = create_document_record(uploaded_file.name, storage_path)
+                st.write(f"Registro creado en DB: {record['id']}")
+
                 saved += 1
                 st.success(f"{uploaded_file.name} subido correctamente.")
+
             except Exception as e:
                 st.error(f"Error subiendo {uploaded_file.name}: {e}")
 
         st.info(f"Resumen: {saved} archivo(s) subido(s).")
-        st.rerun()
 
 st.markdown("### Documentos almacenados")
 
 try:
     documents = list_documents_from_supabase()
+    st.write(f"Cantidad en base: {len(documents)}")
 except Exception as e:
     documents = []
     st.error(f"No se pudieron listar documentos desde Supabase: {e}")
@@ -60,3 +73,18 @@ else:
             """,
             unsafe_allow_html=True
         )
+
+st.markdown("### Verificación de Storage")
+
+if st.button("Listar archivos del bucket", use_container_width=True):
+    try:
+        supabase = get_supabase_client(use_service_role=True)
+        files = supabase.storage.from_("documentos").list()
+
+        st.write("Contenido del bucket:")
+        st.write(files)
+
+        if not files:
+            st.warning("El bucket existe, pero no tiene archivos visibles.")
+    except Exception as e:
+        st.error(f"Error listando bucket: {e}")
