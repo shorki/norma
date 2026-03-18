@@ -12,7 +12,11 @@ def get_openai_client():
     return OpenAI(api_key=api_key)
 
 
-def chunk_text(text: str, chunk_size: int = 1200, overlap: int = 200) -> List[str]:
+def chunk_text(text: str, chunk_size: int = 1800, overlap: int = 150) -> List[str]:
+    """
+    Corta el texto en fragmentos más grandes para reducir la cantidad total
+    de chunks y evitar timeouts al insertar en Supabase.
+    """
     clean = " ".join((text or "").split())
     if not clean:
         return []
@@ -31,7 +35,7 @@ def chunk_text(text: str, chunk_size: int = 1200, overlap: int = 200) -> List[st
     return chunks
 
 
-def embed_texts(texts: List[str], model: str = "text-embedding-3-small", batch_size: int = 100) -> List[List[float]]:
+def embed_texts(texts: List[str], model: str = "text-embedding-3-small", batch_size: int = 50) -> List[List[float]]:
     if not texts:
         return []
 
@@ -49,6 +53,15 @@ def embed_texts(texts: List[str], model: str = "text-embedding-3-small", batch_s
     return all_embeddings
 
 
+def _insert_rows_in_batches(supabase, rows: List[dict], batch_size: int = 25):
+    """
+    Inserta filas en lotes chicos para evitar statement timeout.
+    """
+    for i in range(0, len(rows), batch_size):
+        batch = rows[i:i + batch_size]
+        supabase.table("document_chunks").insert(batch).execute()
+
+
 def index_document_in_supabase(document_id: str, full_text: str) -> int:
     supabase = get_supabase_client(use_service_role=True)
 
@@ -58,6 +71,7 @@ def index_document_in_supabase(document_id: str, full_text: str) -> int:
 
     embeddings = embed_texts(chunks)
 
+    # borra indexación anterior
     supabase.table("document_chunks").delete().eq("documento_id", document_id).execute()
 
     rows = []
@@ -69,7 +83,7 @@ def index_document_in_supabase(document_id: str, full_text: str) -> int:
             "embedding": emb
         })
 
-    supabase.table("document_chunks").insert(rows).execute()
+    _insert_rows_in_batches(supabase, rows, batch_size=25)
 
     return len(chunks)
 
