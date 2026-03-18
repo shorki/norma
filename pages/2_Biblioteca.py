@@ -4,20 +4,23 @@ from utils.document_storage import (
     upload_file_to_supabase,
     create_document_record,
     list_documents_from_supabase,
-    list_bucket_files,
     delete_document_from_supabase,
+    update_document_status,
+    download_file_bytes_from_supabase,
 )
+from utils.lector_pdf import read_document_bytes
+from utils.vector_store import index_document_in_supabase
 
-st.set_page_config(page_title="Biblioteca | Norma", page_icon="⚖️", layout="wide")
+st.set_page_config(page_title="biblioteca | norma", page_icon="⚖️", layout="wide")
 apply_global_styles()
 
-st.markdown('<div class="section-title">Biblioteca</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-title">biblioteca</div>', unsafe_allow_html=True)
 st.markdown(
-    '<div class="section-subtitle">Subí, administrá y depurá documentos jurídicos almacenados en la nube.</div>',
+    '<div class="section-subtitle">Subí, indexá y administrá documentos jurídicos almacenados en la nube.</div>',
     unsafe_allow_html=True
 )
 
-st.markdown("### Subir documentos")
+st.markdown("### Subir e indexar documentos")
 uploaded_files = st.file_uploader(
     "Podés subir PDF, DOCX o TXT",
     type=["pdf", "docx", "txt"],
@@ -25,19 +28,39 @@ uploaded_files = st.file_uploader(
 )
 
 if uploaded_files:
-    if st.button("Guardar en la nube", use_container_width=True):
-        saved = 0
+    if st.button("Subir e indexar", use_container_width=True):
+        processed = 0
 
         for uploaded_file in uploaded_files:
+            document_id = None
             try:
                 storage_path = upload_file_to_supabase(uploaded_file)
-                create_document_record(uploaded_file.name, storage_path)
-                saved += 1
-                st.success(f"{uploaded_file.name} subido correctamente.")
-            except Exception as e:
-                st.error(f"Error subiendo {uploaded_file.name}: {e}")
+                record = create_document_record(uploaded_file.name, storage_path)
+                document_id = record["id"]
 
-        st.info(f"Resumen: {saved} archivo(s) subido(s).")
+                file_bytes = download_file_bytes_from_supabase(storage_path)
+                text = read_document_bytes(file_bytes, uploaded_file.name)
+
+                if not text.strip():
+                    update_document_status(document_id, "error", "No se pudo extraer texto del documento.")
+                    st.error(f"{uploaded_file.name}: no se pudo extraer texto.")
+                    continue
+
+                chunks_count = index_document_in_supabase(document_id, text)
+                update_document_status(document_id, "indexado", None)
+
+                processed += 1
+                st.success(f"{uploaded_file.name} subido e indexado correctamente ({chunks_count} fragmentos internos).")
+
+            except Exception as e:
+                if document_id:
+                    try:
+                        update_document_status(document_id, "error", str(e))
+                    except Exception:
+                        pass
+                st.error(f"Error procesando {uploaded_file.name}: {e}")
+
+        st.info(f"Resumen: {processed} documento(s) subido(s) e indexado(s).")
         st.rerun()
 
 st.markdown("### Documentos almacenados")
@@ -52,15 +75,29 @@ if not documents:
     st.info("Todavía no hay documentos almacenados.")
 else:
     for doc in documents:
-        col1, col2 = st.columns([6, 1.2])
+        col1, col2 = st.columns([6, 1.3])
+
+        estado = doc.get("estado", "subido")
+        error_message = doc.get("error_message")
 
         with col1:
+            extra = ""
+            if estado == "indexado":
+                badge = '<span class="success-pill">Indexado</span>'
+            elif estado == "error":
+                badge = '<span class="danger-pill">Error</span>'
+                if error_message:
+                    extra = f'<p class="small-muted">Detalle: {error_message}</p>'
+            else:
+                badge = '<span class="warning-pill">Subido</span>'
+
             st.markdown(
                 f"""
                 <div class="doc-card">
                     <h4 style="margin-top:0; margin-bottom:8px;">{doc["nombre"]}</h4>
-                    <p class="small-muted">Storage path: {doc["storage_path"]}</p>
+                    <p class="small-muted">{badge}</p>
                     <p class="small-muted">Creado en: {doc["creado_en"]}</p>
+                    {extra}
                 </div>
                 """,
                 unsafe_allow_html=True
@@ -76,39 +113,11 @@ else:
                     )
 
                     if result["storage_deleted"]:
-                        st.success("Documento eliminado de Storage y base.")
+                        st.success("Documento eliminado.")
                     else:
-                        st.warning("Se eliminó el registro de la base. El archivo no existía en Storage o no pudo borrarse.")
+                        st.warning("Se eliminó el registro. El archivo no existía en storage o no pudo borrarse.")
 
                     st.rerun()
 
                 except Exception as e:
                     st.error(f"No se pudo eliminar el documento: {e}")
-
-st.markdown("### Archivos visibles en el bucket")
-
-if st.button("Actualizar vista del bucket", use_container_width=True):
-    st.rerun()
-
-try:
-    files = list_bucket_files()
-except Exception as e:
-    files = []
-    st.error(f"No se pudieron listar archivos del bucket: {e}")
-
-if not files:
-    st.info("El bucket no tiene archivos visibles.")
-else:
-    for file in files:
-        name = file.get("name", "Sin nombre")
-        metadata = file.get("metadata", {})
-        size = metadata.get("size")
-        st.markdown(
-            f"""
-            <div class="doc-card">
-                <h4 style="margin-top:0; margin-bottom:8px;">{name}</h4>
-                <p class="small-muted">Tamaño: {size if size is not None else "No disponible"}</p>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )

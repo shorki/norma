@@ -3,7 +3,7 @@ from utils.helpers import ensure_directories, load_config
 from utils.styles import apply_global_styles
 
 st.set_page_config(
-    page_title="Norma",
+    page_title="norma",
     page_icon="⚖️",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -17,7 +17,7 @@ st.markdown(
     """
     <div class="hero-card formal-hero">
         <div class="hero-badge">PLATAFORMA DOCUMENTAL JURÍDICA</div>
-        <h1 class="hero-title">Norma</h1>
+        <h1 class="hero-title">norma</h1>
         <p class="hero-subtitle">
             Consulta normativa y análisis documental asistido por inteligencia artificial.
         </p>
@@ -35,7 +35,7 @@ with col1:
         """
         <div class="info-card formal-card">
             <h4>Consulta jurídica</h4>
-            <p>Realizá preguntas y obtené respuestas fundamentadas en normativa y documentos.</p>
+            <p>Realizá preguntas y obtené respuestas fundamentadas en normativa y documentos indexados.</p>
         </div>
         """,
         unsafe_allow_html=True
@@ -46,7 +46,7 @@ with col2:
         """
         <div class="info-card formal-card">
             <h4>Biblioteca</h4>
-            <p>Centralizá códigos, leyes y doctrina en un único lugar para su consulta.</p>
+            <p>Centralizá códigos, leyes y doctrina en un único lugar para su consulta e indexación.</p>
         </div>
         """,
         unsafe_allow_html=True
@@ -65,4 +65,4 @@ with col3:
         unsafe_allow_html=True
     )
 
-st.info("Utilizá el menú lateral para navegar por los módulos de Norma.")
+st.info("Utilizá el menú lateral para navegar por los módulos de norma.")

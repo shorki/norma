@@ -49,12 +49,18 @@ def upload_file_to_supabase(uploaded_file):
     return storage_path
 
 
+def download_file_bytes_from_supabase(storage_path: str):
+    supabase = get_supabase_client(use_service_role=True)
+    return supabase.storage.from_(BUCKET_NAME).download(storage_path)
+
+
 def create_document_record(nombre, storage_path):
     supabase = get_supabase_client(use_service_role=True)
 
     result = supabase.table("documentos").insert({
         "nombre": nombre,
-        "storage_path": storage_path
+        "storage_path": storage_path,
+        "estado": "subido"
     }).execute()
 
     if not result.data:
@@ -63,16 +69,22 @@ def create_document_record(nombre, storage_path):
     return result.data[0]
 
 
+def update_document_status(document_id, estado, error_message=None):
+    supabase = get_supabase_client(use_service_role=True)
+
+    payload = {
+        "estado": estado,
+        "error_message": error_message
+    }
+
+    result = supabase.table("documentos").update(payload).eq("id", document_id).execute()
+    return result.data
+
+
 def list_documents_from_supabase():
     supabase = get_supabase_client(use_service_role=True)
     result = supabase.table("documentos").select("*").order("creado_en", desc=True).execute()
     return result.data or []
-
-
-def list_bucket_files():
-    supabase = get_supabase_client(use_service_role=True)
-    files = supabase.storage.from_(BUCKET_NAME).list()
-    return files or []
 
 
 def delete_document_from_supabase(document_id, storage_path=None):
@@ -85,7 +97,6 @@ def delete_document_from_supabase(document_id, storage_path=None):
             supabase.storage.from_(BUCKET_NAME).remove([storage_path])
             storage_deleted = True
         except Exception:
-            # Si el archivo no existe en bucket, igual dejamos borrar el registro
             storage_deleted = False
 
     db_result = supabase.table("documentos").delete().eq("id", document_id).execute()

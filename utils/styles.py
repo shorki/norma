@@ -63,9 +63,7 @@ def apply_global_styles():
         .result-card,
         .metric-box,
         .doc-card,
-        .fragment-card,
-        .legal-output-card,
-        .module-card {
+        .legal-output-card {
             background: #ffffff;
             border: 1px solid #dde3ea;
             border-radius: 16px;
@@ -95,41 +93,9 @@ def apply_global_styles():
             margin-bottom: 0;
         }
 
-        .module-grid {
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 14px;
-            margin-top: 10px;
-            margin-bottom: 22px;
-        }
-
-        .module-card {
-            padding: 18px;
-        }
-
-        .module-title {
-            font-size: 17px;
-            font-weight: 700;
-            color: #111827;
-            margin-bottom: 8px;
-        }
-
-        .module-text {
-            color: #4b5563;
-            line-height: 1.55;
-            font-size: 14px;
-        }
-
         .result-card {
             padding: 22px;
             margin-bottom: 14px;
-        }
-
-        .fragment-card {
-            background: #fbfcfd;
-            border-left: 4px solid #374151;
-            padding: 16px;
-            margin-bottom: 12px;
         }
 
         .section-title {
@@ -144,11 +110,6 @@ def apply_global_styles():
             color: #6b7280;
             margin-bottom: 24px;
             font-size: 15px;
-        }
-
-        .metric-box {
-            padding: 18px;
-            text-align: center;
         }
 
         .small-muted {
@@ -238,15 +199,6 @@ def apply_global_styles():
             margin-bottom: 10px;
         }
 
-        .legal-list {
-            margin: 0;
-            padding-left: 18px;
-        }
-
-        .legal-list li {
-            margin-bottom: 6px;
-        }
-
         .stButton > button {
             background: #111827;
             color: white;
@@ -260,21 +212,6 @@ def apply_global_styles():
             background: #1f2937;
             border-color: #1f2937;
             color: white;
-        }
-
-        .stDownloadButton > button {
-            border-radius: 10px;
-            font-weight: 600;
-        }
-
-        @media (max-width: 900px) {
-            .module-grid {
-                grid-template-columns: 1fr;
-            }
-
-            .hero-title {
-                font-size: 32px;
-            }
         }
         </style>
         """,

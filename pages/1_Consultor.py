@@ -1,29 +1,32 @@
 import streamlit as st
-from utils.helpers import (
-    list_documents,
-    load_config,
-    save_history_entry,
-    current_datetime_str,
-)
-from utils.lector_pdf import read_document, split_into_fragments
+from utils.helpers import load_config, save_history_entry, current_datetime_str
+from utils.document_storage import list_documents_from_supabase, download_file_bytes_from_supabase
+from utils.lector_pdf import read_document_bytes
 from utils.vector_store import semantic_search
 from utils.buscador import generate_answer
 from utils.styles import apply_global_styles
 
-st.set_page_config(page_title="Consultar | Norma", page_icon="⚖️", layout="wide")
+st.set_page_config(page_title="consultar | norma", page_icon="⚖️", layout="wide")
 apply_global_styles()
 
-st.markdown('<div class="section-title">Consultar</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-title">consultar</div>', unsafe_allow_html=True)
 st.markdown(
-    '<div class="section-subtitle">Realizá consultas jurídicas sobre la documentación cargada en Norma.</div>',
+    '<div class="section-subtitle">Realizá consultas jurídicas sobre la normativa cargada e indexada.</div>',
     unsafe_allow_html=True
 )
 
-documents = list_documents()
 config = load_config()
 
-if not documents:
-    st.warning("Todavía no hay documentos cargados. Primero subí archivos en la sección Biblioteca.")
+try:
+    documents = list_documents_from_supabase()
+except Exception as e:
+    documents = []
+    st.error(f"No se pudieron cargar los documentos: {e}")
+
+indexed_docs = [doc for doc in documents if doc.get("estado") == "indexado"]
+
+if not indexed_docs:
+    st.warning("Todavía no hay documentos indexados en la biblioteca.")
     st.stop()
 
 
@@ -35,7 +38,7 @@ def render_professional_output(answer_text, relevant_fragments):
     st.markdown(
         """
         <div class="legal-header-row">
-            <div class="legal-badge">INFORME DE CONSULTA</div>
+            <div class="legal-badge">INFORME</div>
         </div>
         """,
         unsafe_allow_html=True
@@ -55,7 +58,7 @@ def render_professional_output(answer_text, relevant_fragments):
         st.markdown(
             """
             <div class="legal-section">
-                <div class="legal-section-title">Base consultada</div>
+                <div class="legal-section-title">Normativa consultada</div>
             </div>
             """,
             unsafe_allow_html=True
@@ -72,28 +75,30 @@ def render_professional_output(answer_text, relevant_fragments):
         unsafe_allow_html=True
     )
     st.info(
-        "La presente respuesta se basa en los documentos cargados en Norma y constituye apoyo de análisis, no sustituyendo una revisión profesional del caso concreto."
+        "La presente respuesta constituye apoyo de análisis jurídico y no sustituye una revisión profesional del caso concreto."
     )
 
     st.markdown("</div>", unsafe_allow_html=True)
 
 
-col1, col2 = st.columns([1.15, 0.85])
+doc_options = {f'{doc["nombre"]} ({doc["estado"]})': doc for doc in indexed_docs}
+
+col1, col2 = st.columns([1.2, 0.8])
 
 with col1:
     query = st.text_area(
         "Consulta",
         placeholder="Ejemplo: si el poder no aclara cómo actúan dos apoderados, cómo deben actuar",
-        height=180
+        height=160
     )
 
 with col2:
     st.markdown("#### Parámetros")
 
-    selected_docs = st.multiselect(
+    selected_labels = st.multiselect(
         "Documentos",
-        options=[doc["name"] for doc in documents],
-        default=[doc["name"] for doc in documents]
+        options=list(doc_options.keys()),
+        default=list(doc_options.keys())
     )
 
     output_type = st.selectbox(
@@ -102,8 +107,7 @@ with col2:
             "Respuesta directa",
             "Marco conceptual",
             "Resumen",
-            "Puntos clave",
-            "Búsqueda de fragmentos"
+            "Puntos clave"
         ]
     )
 
@@ -116,27 +120,32 @@ if search_button:
         st.error("Ingresá una consulta.")
         st.stop()
 
-    if not selected_docs:
+    if not selected_labels:
         st.error("Seleccioná al menos un documento.")
         st.stop()
+
+    selected_docs = [doc_options[label] for label in selected_labels]
+    selected_doc_ids = [doc["id"] for doc in selected_docs]
 
     with st.spinner("Procesando consulta..."):
         docs_data = []
 
-        for doc in documents:
-            if doc["name"] in selected_docs:
-                text = read_document(doc["path"])
-                fragments = split_into_fragments(text)
+        for doc in selected_docs:
+            try:
+                file_bytes = download_file_bytes_from_supabase(doc["storage_path"])
+                text = read_document_bytes(file_bytes, doc["nombre"])
 
                 docs_data.append({
-                    "name": doc["name"],
+                    "name": doc["nombre"],
                     "full_text": text,
-                    "fragments": fragments
+                    "fragments": []
                 })
+            except Exception:
+                pass
 
         relevant_fragments = semantic_search(
             query=query,
-            selected_docs=selected_docs,
+            selected_doc_ids=selected_doc_ids,
             top_k=8
         )
 
@@ -156,21 +165,5 @@ if search_button:
         })
 
     st.success("Consulta procesada")
-
     st.markdown("### Informe")
     render_professional_output(generated_text, relevant_fragments)
-
-    st.markdown("### Fragmentos relevantes")
-    for frag in relevant_fragments:
-        st.markdown(
-            f"""
-            <div class="fragment-card">
-                <div class="success-pill">{frag["document_name"]}</div>
-                <p class="small-muted">
-                    Chunk #{frag["fragment_number"]} | Relevancia: {frag["score"]}
-                </p>
-                <p>{frag["text"]}</p>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )

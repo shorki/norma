@@ -14,8 +14,8 @@ def normalize_text(text):
 def build_basic_framework(query, relevant_fragments, config):
     if not relevant_fragments:
         return (
-            "No se encontraron coincidencias o fragmentos relevantes para la consulta planteada. "
-            "Probá con otra redacción, agregá más contexto o reindexá los documentos."
+            "No se encontraron fragmentos relevantes para la consulta planteada. "
+            "Probá con otra redacción o verificá que los documentos estén indexados."
         )
 
     jurisdiction = config.get("jurisdiccion", "Uruguay")
@@ -26,14 +26,14 @@ def build_basic_framework(query, relevant_fragments, config):
 
     response = f"""
 **Análisis preliminar**
+
 La consulta fue interpretada dentro del marco de **{materia}** para la jurisdicción de **{jurisdiction}**.
 
-**Documentos con relevancia semántica**
+**Normativa consultada**
 {chr(10).join([f"- {doc}" for doc in docs_used])}
 
-**Lectura preliminar**
-Los fragmentos encontrados parecen útiles para construir una respuesta inicial.
-Esta salida tiene un tono **{estilo.lower()}** y está pensada como apoyo de trabajo, no como conclusión jurídica definitiva.
+**Observación**
+La salida tiene un tono **{estilo.lower()}** y constituye apoyo de trabajo, no una conclusión jurídica definitiva.
     """.strip()
 
     return response
@@ -46,7 +46,7 @@ def build_context_for_llm(relevant_fragments):
     blocks = []
     for frag in relevant_fragments:
         block = (
-            f"[Documento: {frag['document_name']} | Chunk: {frag['fragment_number']} | Relevancia: {frag['score']}]\n"
+            f"[Documento: {frag['document_name']} | Fragmento: {frag['fragment_number']}]\n"
             f"{frag['text']}"
         )
         blocks.append(block)
@@ -142,8 +142,6 @@ def answer_article_count_from_documents(query, documents_data):
     if min_article == 1:
         response += f" Si la numeración es continua, el documento tendría **{max_article} artículos**."
 
-    response += f"\n\nÚltimos artículos detectados: {', '.join(map(str, best_numbers[-10:]))}"
-
     return response, "regla"
 
 
@@ -154,8 +152,8 @@ def ask_openai_with_context(query, relevant_fragments, config, output_type):
 
     if not relevant_fragments:
         return (
-            "No encontré fragmentos relevantes en los documentos cargados para responder con fundamento. "
-            "Probá reformular la consulta o reindexar los documentos."
+            "No encontré normativa suficiente para responder con fundamento. "
+            "Probá reformular la consulta o verificá que los documentos estén indexados."
         )
 
     client = OpenAI(api_key=api_key)
@@ -168,12 +166,14 @@ def ask_openai_with_context(query, relevant_fragments, config, output_type):
     system_prompt = f"""
 Sos un asistente jurídico documental.
 Respondé usando prioritariamente el contexto provisto.
-Si el contexto no alcanza, indicá la limitación con claridad.
 No inventes artículos ni normas.
 Escribí en español.
 Jurisdicción preferente: {jurisdiction}.
 Materia preferente: {materia}.
 Estilo de redacción: {estilo}.
+
+La respuesta debe verse profesional y clara.
+Preferí una estructura ordenada, con lenguaje jurídico accesible.
     """.strip()
 
     user_prompt = f"""
@@ -188,8 +188,9 @@ Contexto documental:
 Instrucciones:
 - Respondé claro y profesional.
 - Basate en los fragmentos recuperados.
-- Si podés, mencioná documento y chunk.
-- Si el contexto no alcanza, decilo explícitamente.
+- Si el contexto no alcanza, decilo expresamente.
+- No muestres lenguaje técnico de sistemas.
+- Si corresponde, citá de manera natural el documento consultado.
     """.strip()
 
     response = client.responses.create(
