@@ -4,6 +4,7 @@ from utils.document_storage import list_documents_from_supabase, download_file_b
 from utils.lector_pdf import read_document_bytes
 from utils.vector_store import semantic_search
 from utils.buscador import generate_answer
+from utils.audio_transcription import transcribe_audio_bytes
 from utils.styles import apply_global_styles
 
 st.set_page_config(page_title="consultar | norma", page_icon="⚖️", layout="wide")
@@ -11,7 +12,7 @@ apply_global_styles()
 
 st.markdown('<div class="section-title">consultar</div>', unsafe_allow_html=True)
 st.markdown(
-    '<div class="section-subtitle">Realizá consultas jurídicas sobre la normativa cargada e indexada.</div>',
+    '<div class="section-subtitle">Realizá consultas jurídicas por escrito o por voz sobre la normativa cargada e indexada.</div>',
     unsafe_allow_html=True
 )
 
@@ -28,6 +29,12 @@ indexed_docs = [doc for doc in documents if doc.get("estado") == "indexado"]
 if not indexed_docs:
     st.warning("Todavía no hay documentos indexados en la biblioteca.")
     st.stop()
+
+if "consulta_texto" not in st.session_state:
+    st.session_state["consulta_texto"] = ""
+
+if "transcripcion_voz" not in st.session_state:
+    st.session_state["transcripcion_voz"] = ""
 
 
 def render_professional_output(answer_text, relevant_fragments):
@@ -83,24 +90,58 @@ def render_professional_output(answer_text, relevant_fragments):
 
 doc_options = {f'{doc["nombre"]} ({doc["estado"]})': doc for doc in indexed_docs}
 
-col1, col2 = st.columns([1.2, 0.8])
+st.markdown("### Consulta")
 
-with col1:
+voice_col, text_col = st.columns([1, 1.4])
+
+with voice_col:
+    st.markdown("#### Consulta por voz")
+    audio_value = st.audio_input("Grabá tu consulta")
+
+    if audio_value is not None:
+        st.audio(audio_value)
+
+        if st.button("Transcribir voz", use_container_width=True):
+            try:
+                audio_bytes = audio_value.read()
+                transcript = transcribe_audio_bytes(
+                    audio_bytes=audio_bytes,
+                    filename="consulta.wav",
+                    mime_type="audio/wav"
+                )
+
+                st.session_state["transcripcion_voz"] = transcript
+                st.session_state["consulta_texto"] = transcript
+                st.success("Consulta de voz transcripta correctamente.")
+                st.rerun()
+
+            except Exception as e:
+                st.error(f"No se pudo transcribir el audio: {e}")
+
+with text_col:
+    st.markdown("#### Consulta escrita")
     query = st.text_area(
         "Consulta",
+        key="consulta_texto",
         placeholder="Ejemplo: si el poder no aclara cómo actúan dos apoderados, cómo deben actuar",
-        height=160
+        height=180
     )
 
-with col2:
-    st.markdown("#### Parámetros")
+    if st.session_state.get("transcripcion_voz"):
+        st.caption("La consulta fue cargada desde audio. Podés editarla antes de consultar.")
 
+st.markdown("### Parámetros")
+
+param_col1, param_col2 = st.columns([1.2, 0.8])
+
+with param_col1:
     selected_labels = st.multiselect(
         "Documentos",
         options=list(doc_options.keys()),
         default=list(doc_options.keys())
     )
 
+with param_col2:
     output_type = st.selectbox(
         "Tipo de salida",
         [
@@ -116,8 +157,10 @@ with col2:
 search_button = st.button("Consultar", use_container_width=True)
 
 if search_button:
-    if not query.strip():
-        st.error("Ingresá una consulta.")
+    query = st.session_state.get("consulta_texto", "").strip()
+
+    if not query:
+        st.error("Ingresá o grabá una consulta.")
         st.stop()
 
     if not selected_labels:
